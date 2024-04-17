@@ -4,6 +4,8 @@
 This is a research project which started as part
 of [iced-hs](https://github.com/ibaryshnikov/iced-hs)
 
+Built with [tokio](https://github.com/tokio-rs/tokio)
+
 ## Description
 
 `Future a` allows to use Rust futures with `do` notation:
@@ -40,4 +42,15 @@ callFutures = do
   liftIO $ putStrLn "Tick"
   delay 1
   liftIO $ putStrLn "Done"
+```
+
+## Usage
+
+```bash
+# build libfuture_hs.a
+./build_rust.sh
+
+# call ghc
+# note that -threaded is required
+ghc -threaded -ipath/to/this/repo path/to/libfuture_hs.a main.hs
 ```
