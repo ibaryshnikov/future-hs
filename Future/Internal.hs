@@ -1,5 +1,6 @@
 module Future.Internal where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Foreign
 import System.IO.Unsafe
@@ -13,14 +14,14 @@ foreign import ccall safe "future_run"
 data Future a = Future (FuturePtr a)
 
 instance Functor Future where
-  fmap fab ma = ma >>= (pure . fab)
+  fmap = liftM
 
 instance Applicative Future where
-  pure a      = wrap a
-  mfab <*> ma = mfab >>= (\fab -> ma >>= (pure . fab))
+  pure = wrap
+  (<*>) = ap
 
 instance Monad Future where
-  (>>=) ma fab = compose ma fab
+  (>>=) = compose
 
 foreign import ccall safe "future_wrap_value"
   wrap_value :: StablePtr a -> FuturePtr a
@@ -32,7 +33,7 @@ makePtr :: a -> StablePtr a
 makePtr a = unsafePerformIO $ newStablePtr a
 
 instance MonadIO Future where
-  liftIO io = wrapIO io
+  liftIO = wrapIO
 
 foreign import ccall safe "future_wrap_io"
   future_wrap_io :: FunPtr (NativeIO a) -> FuturePtr a
