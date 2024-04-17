@@ -1,0 +1,9 @@
+.idea
+/build
+/target
+Cargo.lock
+**/*.hi
+**/*.o
+**/*_stub.h
+**/main
+libfuture_hs.a
