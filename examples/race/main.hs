@@ -31,5 +31,4 @@ example = do
   pure ()
 
 main :: IO ()
-main = do
-  run example
+main = run example
