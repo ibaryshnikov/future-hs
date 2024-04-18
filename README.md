@@ -6,12 +6,12 @@ of [iced-hs](https://github.com/ibaryshnikov/iced-hs)
 
 Built with [tokio](https://github.com/tokio-rs/tokio)
 
-## Description
 
-`Future a` allows to use Rust futures with `do` notation:
+## Example
 
 ```haskell
-delay :: Int -> Future () -- Rust Future which waits n seconds
+import Future
+import Future.Time
 
 callA :: Future Int
 callA = do
@@ -23,26 +23,37 @@ callB a = do
   delay 2
   pure $ a + 4
 
-callFutures :: Future ()
-callFutures = do
+example :: Future ()
+example = do
   a <- callA
-  delay 3
   b <- callB a
-  delay 1
   liftIO $ putStrLn $ show b -- prints 5
+
+main :: IO ()
+main = run example
 ```
 
-It also implements `MonadIO` making it possible to use `IO`:
+There are `race` and `concurrent` functions:
 
 ```haskell
-callFutures :: Future ()
-callFutures = do
-  liftIO $ putStrLn "Starting"
-  delay 1
-  liftIO $ putStrLn "Tick"
-  delay 1
-  liftIO $ putStrLn "Done"
+race :: Future a -> Future b -> Future (Either a b)
+concurrent :: Future a -> Future b -> Future (a, b)
 ```
+
+For example:
+
+```haskell
+do
+  let ma = callA
+  let mb = callB
+  (a, b) <- concurrent ma mb
+```
+
+`race` is a wrapper around
+[tokio::select!](https://docs.rs/tokio/1.37.0/tokio/macro.select.html)
+and `concurrent` uses
+[tokio::join!](https://docs.rs/tokio/1.37.0/tokio/macro.join.html)
+
 
 ## Usage
 
