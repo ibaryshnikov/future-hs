@@ -9,4 +9,4 @@ crate-type = ["staticlib"]
 
 [dependencies.tokio]
 version = "1.37"
-features = ["rt-multi-thread", "time"]
+features = ["macros", "rt-multi-thread", "time"]

@@ -43,6 +43,9 @@ type NativeIO a = IO (StablePtr a)
 foreign import ccall "wrapper"
   makeIOCallback :: NativeIO a -> IO (FunPtr (NativeIO a))
 
+foreign export ccall "free_haskell_fun_ptr"
+  freeHaskellFunPtr :: FunPtr a -> IO ()
+
 wrapIO :: IO a -> Future a
 wrapIO io = Future $ future_wrap_io callback
   where
@@ -80,3 +83,50 @@ compose (Future ptrA) fab = Future $ future_compose ptrA nativeFAB
 
 run :: Future a -> IO ()
 run (Future ptr) = future_run ptr
+
+foreign import ccall safe "future_concurrent"
+  future_concurrent :: FuturePtr a
+                    -> FuturePtr b
+                    -> FunPtr (NativeTuple a b)
+                    -> FuturePtr (a, b)
+
+type NativeTuple a b = StablePtr a -> StablePtr b -> IO (StablePtr (a, b))
+
+foreign import ccall "wrapper"
+  makeTuplePtr :: NativeTuple a b -> IO (FunPtr (NativeTuple a b))
+
+tuple :: NativeTuple a b
+tuple ptrA ptrB = do
+  a <- fromPtr ptrA
+  b <- fromPtr ptrB
+  newStablePtr (a, b)
+
+concurrent :: Future a -> Future b -> Future (a, b)
+concurrent (Future ptrA) (Future ptrB) =
+  Future $ future_concurrent ptrA ptrB tuplePtr
+  where
+    tuplePtr = unsafePerformIO $ makeTuplePtr tuple
+
+foreign import ccall safe "future_race"
+  future_race :: FuturePtr a
+              -> FuturePtr b
+              -> FunPtr (NativeEither a (Either a b))
+              -> FunPtr (NativeEither b (Either a b))
+              -> FuturePtr (Either a b)
+
+type NativeEither a ma = StablePtr a -> IO (StablePtr ma)
+
+foreign import ccall "wrapper"
+  makeEitherPtr :: NativeEither a ma -> IO (FunPtr (NativeEither a ma))
+
+wrapEither :: (a -> ma) -> NativeEither a ma
+wrapEither fab ptr = do
+  value <- fromPtr ptr
+  newStablePtr $ fab value
+
+race :: Future a -> Future b -> Future (Either a b)
+race (Future ptrA) (Future ptrB) =
+  Future $ future_race ptrA ptrB leftPtr rightPtr
+  where
+    leftPtr  = unsafePerformIO $ makeEitherPtr $ wrapEither Left
+    rightPtr = unsafePerformIO $ makeEitherPtr $ wrapEither Right

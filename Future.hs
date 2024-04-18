@@ -1,7 +1,9 @@
 module Future (
   Future,
-  run,
   liftIO,
+  run,
+  concurrent,
+  race,
 ) where
 
 import Control.Monad.IO.Class
