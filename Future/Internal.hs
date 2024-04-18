@@ -85,48 +85,40 @@ run :: Future a -> IO ()
 run (Future ptr) = future_run ptr
 
 foreign import ccall safe "future_concurrent"
-  future_concurrent :: FuturePtr a
-                    -> FuturePtr b
-                    -> FunPtr (NativeTuple a b)
-                    -> FuturePtr (a, b)
+  future_concurrent :: FuturePtr a -> FuturePtr b -> FuturePtr (a, b)
 
-type NativeTuple a b = StablePtr a -> StablePtr b -> IO (StablePtr (a, b))
+type NativePair a b = StablePtr a -> StablePtr b -> IO (StablePtr (a, b))
 
-foreign import ccall "wrapper"
-  makeTuplePtr :: NativeTuple a b -> IO (FunPtr (NativeTuple a b))
+foreign export ccall "future_pair"
+  pair :: NativePair a b
 
-tuple :: NativeTuple a b
-tuple ptrA ptrB = do
+pair :: NativePair a b
+pair ptrA ptrB = do
   a <- fromPtr ptrA
   b <- fromPtr ptrB
   newStablePtr (a, b)
 
 concurrent :: Future a -> Future b -> Future (a, b)
-concurrent (Future ptrA) (Future ptrB) =
-  Future $ future_concurrent ptrA ptrB tuplePtr
-  where
-    tuplePtr = unsafePerformIO $ makeTuplePtr tuple
+concurrent (Future ptrA) (Future ptrB) = Future $ future_concurrent ptrA ptrB
 
 foreign import ccall safe "future_race"
-  future_race :: FuturePtr a
-              -> FuturePtr b
-              -> FunPtr (NativeEither a (Either a b))
-              -> FunPtr (NativeEither b (Either a b))
-              -> FuturePtr (Either a b)
+  future_race :: FuturePtr a -> FuturePtr b -> FuturePtr (Either a b)
 
 type NativeEither a ma = StablePtr a -> IO (StablePtr ma)
 
-foreign import ccall "wrapper"
-  makeEitherPtr :: NativeEither a ma -> IO (FunPtr (NativeEither a ma))
+foreign export ccall "future_left"  left  :: NativeEither a (Either a b)
+foreign export ccall "future_right" right :: NativeEither b (Either a b)
 
-wrapEither :: (a -> ma) -> NativeEither a ma
-wrapEither fab ptr = do
-  value <- fromPtr ptr
-  newStablePtr $ fab value
+left :: NativeEither a (Either a b)
+left = makeEither Left
+
+right :: NativeEither b (Either a b)
+right = makeEither Right
+
+makeEither :: (a -> ma) -> NativeEither a ma
+makeEither f ptr = do
+  a <- fromPtr ptr
+  newStablePtr $ f a
 
 race :: Future a -> Future b -> Future (Either a b)
-race (Future ptrA) (Future ptrB) =
-  Future $ future_race ptrA ptrB leftPtr rightPtr
-  where
-    leftPtr  = unsafePerformIO $ makeEitherPtr $ wrapEither Left
-    rightPtr = unsafePerformIO $ makeEitherPtr $ wrapEither Right
+race (Future ptrA) (Future ptrB) = Future $ future_race ptrA ptrB

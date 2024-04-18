@@ -14,11 +14,12 @@ type PinnedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 type RawFuture<T> = *mut PinnedFuture<T>;
 type IOCallback = unsafe extern "C" fn() -> *const u8;
 type ComposeCallback = unsafe extern "C" fn(ptr: *const u8) -> RawFuture<StablePtr>;
-type ConcurrentCallback = unsafe extern "C" fn(ptr_a: *const u8, ptr_b: *const u8) -> *const u8;
-type RaceCallback = unsafe extern "C" fn(ptr: *const u8) -> *const u8;
 
 extern "C" {
     fn free_haskell_fun_ptr(ptr: usize);
+    fn future_pair(ptr_a: *const u8, ptr_b: *const u8) -> *const u8;
+    fn future_left(ptr: *const u8) -> *const u8;
+    fn future_right(ptr: *const u8) -> *const u8;
 }
 
 macro_rules! free_fun_ptr {
@@ -77,15 +78,13 @@ extern "C" fn future_compose(
 extern "C" fn future_concurrent(
     future_ptr_a: RawFuture<StablePtr>,
     future_ptr_b: RawFuture<StablePtr>,
-    make_tuple: ConcurrentCallback,
 ) -> RawFuture<StablePtr> {
     let future_a = unsafe { Box::from_raw(future_ptr_a) };
     let future_b = unsafe { Box::from_raw(future_ptr_b) };
     let future = async move {
         let (a, b) = tokio::join!(future_a, future_b);
-        let result_ptr = unsafe { make_tuple(a.ptr, b.ptr) };
-        free_fun_ptr!(make_tuple);
-        StablePtr { ptr: result_ptr }
+        let ptr = unsafe { future_pair(a.ptr, b.ptr) };
+        StablePtr { ptr }
     };
     let pinned = Box::pin(future);
     Box::into_raw(Box::new(pinned))
@@ -95,19 +94,15 @@ extern "C" fn future_concurrent(
 extern "C" fn future_race(
     future_ptr_a: RawFuture<StablePtr>,
     future_ptr_b: RawFuture<StablePtr>,
-    left: RaceCallback,
-    right: RaceCallback,
 ) -> RawFuture<StablePtr> {
     let future_a = unsafe { Box::from_raw(future_ptr_a) };
     let future_b = unsafe { Box::from_raw(future_ptr_b) };
     let future = async move {
-        let either_ptr = tokio::select! {
-            a = future_a => unsafe { left(a.ptr) },
-            b = future_b => unsafe { right(b.ptr) },
+        let ptr = tokio::select! {
+            a = future_a => unsafe { future_left(a.ptr) },
+            b = future_b => unsafe { future_right(b.ptr) },
         };
-        free_fun_ptr!(left);
-        free_fun_ptr!(right);
-        StablePtr { ptr: either_ptr }
+        StablePtr { ptr }
     };
     let pinned = Box::pin(future);
     Box::into_raw(Box::new(pinned))
