@@ -12,6 +12,8 @@ unsafe impl Send for StablePtr {}
 
 type PinnedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 type RawFuture<T> = *mut PinnedFuture<T>;
+
+type MainCallback = unsafe extern "C" fn() -> RawFuture<()>;
 type IOCallback = unsafe extern "C" fn() -> *const u8;
 type ComposeCallback = unsafe extern "C" fn(ptr: *const u8) -> RawFuture<StablePtr>;
 
@@ -31,9 +33,11 @@ macro_rules! free_fun_ptr {
 }
 
 #[no_mangle]
-extern "C" fn future_run(future_ptr: RawFuture<()>) {
+extern "C" fn future_run(callback: MainCallback) {
     let runtime = Runtime::new().expect("Should build a runtime");
     runtime.block_on(async move {
+        let future_ptr = unsafe { callback() };
+        free_fun_ptr!(callback);
         let future = unsafe { Box::from_raw(future_ptr) };
         future.await;
     });
@@ -68,6 +72,21 @@ extern "C" fn future_compose(
         let future_ptr_b = unsafe { fab(a.ptr) };
         free_fun_ptr!(fab);
         let future_b = unsafe { Box::from_raw(future_ptr_b) };
+        future_b.await
+    };
+    let pinned = Box::pin(future);
+    Box::into_raw(Box::new(pinned))
+}
+
+#[no_mangle]
+extern "C" fn future_sequential(
+    future_ptr_a: RawFuture<()>,
+    future_ptr_b: RawFuture<StablePtr>,
+) -> RawFuture<StablePtr> {
+    let future_a = unsafe { Box::from_raw(future_ptr_a) };
+    let future_b = unsafe { Box::from_raw(future_ptr_b) };
+    let future = async move {
+        future_a.await;
         future_b.await
     };
     let pinned = Box::pin(future);
