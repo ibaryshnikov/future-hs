@@ -3,7 +3,6 @@ module Future.Time (
 ) where
 
 import Control.Monad
-import GHC.Base
 import Foreign
 import Foreign.C.Types
 
@@ -22,4 +21,4 @@ makeDelay :: Int -> IO (FuturePtr ())
 makeDelay = tokio_time_sleep <=< duration_from_secs . fromIntegral
 
 delay :: Int -> Future ()
-delay n = Future (\s -> unIO (makeDelay n) s)
+delay n = Future (makeDelay n)

@@ -1,20 +1,13 @@
-{-# LANGUAGE UnboxedTuples #-}
-{-# LANGUAGE MagicHash #-}
-
 module Future.Internal where
 
 import Control.Monad
 import Control.Monad.IO.Class
-import GHC.Base
 import Foreign
 
 data NativeFuture a
 type FuturePtr a = Ptr (NativeFuture a)
 
-newtype Future a = Future (State# RealWorld -> (# State# RealWorld, FuturePtr a #))
-
-unFuture :: Future a -> (State# RealWorld -> (# State# RealWorld, FuturePtr a #))
-unFuture (Future a) = a
+newtype Future a = Future (IO (FuturePtr a))
 
 instance Monad Future where
   (>>=) = compose
@@ -38,11 +31,9 @@ foreign export ccall "free_haskell_fun_ptr"
 foreign import ccall safe "future_wrap_value"
   wrap_value :: StablePtr a -> IO (FuturePtr a)
 
-wrapValue :: a -> IO (FuturePtr a)
-wrapValue = wrap_value <=< newStablePtr
-
 wrap :: a -> Future a
-wrap a = Future (\s -> unIO (wrapValue a) s)
+wrap a = Future $ do
+  wrap_value =<< newStablePtr a
 
 -- wrap ENDS
 
@@ -51,15 +42,13 @@ wrap a = Future (\s -> unIO (wrapValue a) s)
 foreign import ccall safe "future_sequential"
   future_sequential :: FuturePtr a -> FuturePtr b -> IO (FuturePtr b)
 
-futureSequential :: FuturePtr a -> Future b -> IO (FuturePtr b)
-futureSequential ptrA (Future mb) = IO (\s -> case mb s of
-  (# new_s, ptrB #) -> unIO (future_sequential ptrA ptrB) new_s)
-
 -- potentially useful, but it's ignored by the compiler
 -- even if you declare (*>) = sequential
 sequential :: Future a -> Future b -> Future b
-sequential (Future ma) mb = Future (\s -> case ma s of
-  (# new_s, ptrA #) -> unIO (futureSequential ptrA mb) new_s)
+sequential (Future ma) (Future mb) = Future $ do
+  ptrA <- ma
+  ptrB <- mb
+  future_sequential ptrA ptrB
 
 -- sequential ENDS
 
@@ -74,15 +63,15 @@ foreign import ccall "wrapper"
   makeFABCallback :: NativeFAB a b -> IO (FunPtr (NativeFAB a b))
 
 wrapFAB :: (a -> Future b) -> NativeFAB a b
-wrapFAB fab ptrA = IO (\s -> case unIO (fromPtr ptrA) s of
-  (# new_s, a #) -> unFuture (fab a) new_s)
-
-futureCompose :: FuturePtr a -> (a -> Future b) -> IO (FuturePtr b)
-futureCompose ptrA = future_compose ptrA <=< makeFABCallback . wrapFAB
+wrapFAB fab ptrA = do
+  a <- fromPtr ptrA
+  case fab a of (Future mb) -> mb
 
 compose :: Future a -> (a -> Future b) -> Future b
-compose (Future m) fab = Future (\s -> case m s of
-  (# new_s, ptrA #) -> unIO (futureCompose ptrA fab) new_s)
+compose (Future ma) fab = Future $ do
+  ptrA <- ma
+  fabPtr <- makeFABCallback $ wrapFAB fab
+  future_compose ptrA fabPtr
 
 freePtr :: StablePtr a -> IO ()
 freePtr ptr = case ptrToIntPtr $ castStablePtrToPtr ptr of
@@ -107,11 +96,9 @@ foreign import ccall safe "future_wrap_io"
 foreign import ccall "wrapper"
   makeIOCallback :: IO (StablePtr a) -> IO (FunPtr (IO (StablePtr a)))
 
-passIO :: IO a -> IO (FuturePtr a)
-passIO = future_wrap_io <=< makeIOCallback . (=<<) newStablePtr
-
 wrapIO :: IO a -> Future a
-wrapIO io = Future (\s -> unIO (passIO io) s)
+wrapIO io = Future $ do
+  future_wrap_io =<< makeIOCallback . newStablePtr =<< io
 
 -- wrapIO ENDS
 
@@ -125,11 +112,8 @@ type MainCallback = IO (FuturePtr ())
 foreign import ccall "wrapper"
   makeMainCallback :: MainCallback -> IO (FunPtr MainCallback)
 
-wrapMain :: Future () -> IO (FuturePtr ())
-wrapMain m = IO (\s -> unFuture m s)
-
 run :: (Future ()) -> IO ()
-run = future_run <=< makeMainCallback . wrapMain
+run (Future callback) = future_run =<< makeMainCallback callback
 
 -- run ENDS
 
@@ -149,13 +133,11 @@ pair ptrA ptrB = do
   b <- fromPtr ptrB
   newStablePtr (a, b)
 
-futureConcurrent :: FuturePtr a -> Future b -> IO (FuturePtr (a, b))
-futureConcurrent ptrA (Future mb) = IO(\s -> case mb s of
-  (# new_s, ptrB #) -> unIO (future_concurrent ptrA ptrB) new_s)
-
 concurrent :: Future a -> Future b -> Future (a, b)
-concurrent (Future ma) mb = Future (\s -> case ma s of
-  (# new_s, ptrA #) -> unIO (futureConcurrent ptrA mb) new_s)
+concurrent (Future ma) (Future mb) = Future $ do
+  ptrA <- ma
+  ptrB <- mb
+  future_concurrent ptrA ptrB
 
 -- concurrent ENDS
 
@@ -180,12 +162,10 @@ makeEither f ptr = do
   a <- fromPtr ptr
   newStablePtr $ f a
 
-futureRace :: FuturePtr a -> Future b -> IO (FuturePtr (Either a b))
-futureRace ptrA (Future mb) = IO (\s -> case mb s of
-  (# new_s, ptrB #) -> unIO (future_race ptrA ptrB) new_s)
-
 race :: Future a -> Future b -> Future (Either a b)
-race (Future ma) mb = Future (\s -> case ma s of
-  (# new_s, ptrA #) -> unIO (futureRace ptrA mb) new_s)
+race (Future ma) (Future mb) = Future $ do
+  ptrA <- ma
+  ptrB <- mb
+  future_race ptrA ptrB
 
 -- race ENDS

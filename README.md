@@ -6,6 +6,7 @@ of [iced-hs](https://github.com/ibaryshnikov/iced-hs)
 
 Built with [tokio](https://github.com/tokio-rs/tokio)
 
+
 ## Semantics
 
 ```
@@ -23,19 +24,6 @@ is
 let a = call_a.await;
 call_b(a).await; 
 ```
-
-
-## Implementation details
-
-`Future` uses the same approach as `IO`
-
-```haskell
-newtype Future a = Future (State# RealWorld -> (# State# RealWorld, FuturePtr a #))
-```
-
-Related articles:
-- https://www.fpcomplete.com/haskell/tutorial/primitive-haskell-tutorial/
-- https://wiki.haskell.org/Evaluation_order_and_state_tokens
 
 
 ## Example
