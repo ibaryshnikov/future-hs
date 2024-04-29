@@ -28,7 +28,6 @@ example = do
   let mb = callB 5
   first <- race ma mb
   liftIO $ putStrLn $ toText first
-  pure ()
 
 main :: IO ()
 main = run example

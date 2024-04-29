@@ -3,6 +3,7 @@ module Future.Time (
 ) where
 
 import Control.Monad
+import Data.Word
 import Foreign
 import Foreign.C.Types
 
@@ -11,14 +12,14 @@ import Future.Internal
 data NativeDuration
 type DurationPtr = Ptr NativeDuration
 
-foreign import ccall safe "duration_from_secs"
+foreign import ccall "duration_from_secs"
   duration_from_secs :: CULong -> IO (DurationPtr)
 
-foreign import ccall safe "tokio_time_sleep"
+foreign import ccall "tokio_time_sleep"
   tokio_time_sleep :: DurationPtr -> IO (FuturePtr ())
 
-makeDelay :: Int -> IO (FuturePtr ())
-makeDelay = tokio_time_sleep <=< duration_from_secs . fromIntegral
+makeDelay :: Word64 -> IO (FuturePtr ())
+makeDelay = tokio_time_sleep <=< duration_from_secs . CULong
 
-delay :: Int -> Future ()
+delay :: Word64 -> Future ()
 delay n = Future (makeDelay n)

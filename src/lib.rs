@@ -62,6 +62,20 @@ extern "C" fn future_wrap_io(callback: IOCallback) -> RawFuture<StablePtr> {
 }
 
 #[no_mangle]
+extern "C" fn future_spawn_blocking(callback: IOCallback) -> RawFuture<StablePtr> {
+    let handle = tokio::task::spawn_blocking(move || {
+        let ptr = unsafe { callback() };
+        free_fun_ptr!(callback);
+        StablePtr { ptr }
+    });
+    let future = async move {
+        handle.await.expect("Should join spawn_blocking handle")
+    };
+    let pinned = Box::pin(future);
+    Box::into_raw(Box::new(pinned))
+}
+
+#[no_mangle]
 extern "C" fn future_compose(
     future_ptr_a: RawFuture<StablePtr>,
     fab: ComposeCallback,

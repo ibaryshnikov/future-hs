@@ -24,7 +24,6 @@ example = do
   let mb = callB 5
   (a, b) <- concurrent ma mb
   liftIO $ putStrLn $ "(" ++ a ++ ", " ++ show b ++ ")"
-  pure ()
 
 main :: IO ()
 main = run example

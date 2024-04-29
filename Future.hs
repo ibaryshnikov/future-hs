@@ -4,6 +4,7 @@ module Future (
   run,
   concurrent,
   race,
+  spawnBlocking,
 ) where
 
 import Control.Monad.IO.Class

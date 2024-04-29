@@ -28,7 +28,7 @@ foreign export ccall "free_haskell_fun_ptr"
 
 -- wrap STARTS
 
-foreign import ccall safe "future_wrap_value"
+foreign import ccall "future_wrap_value"
   wrap_value :: StablePtr a -> IO (FuturePtr a)
 
 wrap :: a -> Future a
@@ -39,7 +39,7 @@ wrap a = Future $ do
 
 -- sequential STARTS
 
-foreign import ccall safe "future_sequential"
+foreign import ccall "future_sequential"
   future_sequential :: FuturePtr a -> FuturePtr b -> IO (FuturePtr b)
 
 -- potentially useful, but it's ignored by the compiler
@@ -54,7 +54,7 @@ sequential (Future ma) (Future mb) = Future $ do
 
 -- compose STARTS
 
-foreign import ccall safe "future_compose"
+foreign import ccall "future_compose"
   future_compose :: FuturePtr a -> FunPtr (NativeFAB a b) -> IO (FuturePtr b)
 
 type NativeFAB a b = StablePtr a -> IO (FuturePtr b)
@@ -90,21 +90,35 @@ fromPtr ptr = do
 
 -- wrapIO STARTS
 
-foreign import ccall safe "future_wrap_io"
-  future_wrap_io :: FunPtr (IO (StablePtr a)) -> IO (FuturePtr a)
+foreign import ccall "future_wrap_io"
+  wrap_io :: FunPtr (IO (StablePtr a)) -> IO (FuturePtr a)
 
 foreign import ccall "wrapper"
   makeIOCallback :: IO (StablePtr a) -> IO (FunPtr (IO (StablePtr a)))
 
 wrapIO :: IO a -> Future a
-wrapIO io = Future $ do
-  future_wrap_io =<< makeIOCallback . newStablePtr =<< io
+wrapIO io = Future $ wrap_value =<< newStablePtr =<< io
 
 -- wrapIO ENDS
 
+-- spawnBlocking STARTS
+
+foreign import ccall "future_spawn_blocking"
+  spawn_blocking :: FunPtr (IO (StablePtr a)) -> IO (FuturePtr a)
+
+wrapBlockingCallback :: IO a -> IO (StablePtr a)
+wrapBlockingCallback io = newStablePtr =<< io
+
+spawnBlocking :: IO a -> Future a
+spawnBlocking io = Future $ do
+  let callback = wrapBlockingCallback io
+  spawn_blocking =<< makeIOCallback callback
+
+-- spawnBlocking ENDS
+
 -- run STARTS
 
-foreign import ccall safe "future_run"
+foreign import ccall "future_run"
   future_run :: FunPtr MainCallback -> IO ()
 
 type MainCallback = IO (FuturePtr ())
@@ -119,7 +133,7 @@ run (Future callback) = future_run =<< makeMainCallback callback
 
 -- concurrent STARTS
 
-foreign import ccall safe "future_concurrent"
+foreign import ccall "future_concurrent"
   future_concurrent :: FuturePtr a -> FuturePtr b -> IO (FuturePtr (a, b))
 
 type NativePair a b = StablePtr a -> StablePtr b -> IO (StablePtr (a, b))
@@ -143,7 +157,7 @@ concurrent (Future ma) (Future mb) = Future $ do
 
 -- race STARTS
 
-foreign import ccall safe "future_race"
+foreign import ccall "future_race"
   future_race :: FuturePtr a -> FuturePtr b -> IO (FuturePtr (Either a b))
 
 type NativeEither a ma = StablePtr a -> IO (StablePtr ma)
