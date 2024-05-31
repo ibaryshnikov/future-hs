@@ -1,25 +1,29 @@
 module Future.Time (
-    delay,
+    delaySecs,
+    delayMillis,
+    delayMicros,
+    delayNanos,
 ) where
 
-import Control.Monad
 import Data.Word
-import Foreign
-import Foreign.C.Types
 
+import Future.Duration
 import Future.Internal
 
-data NativeDuration
-type DurationPtr = Ptr NativeDuration
-
-foreign import ccall "duration_from_secs"
-  duration_from_secs :: CULong -> IO (DurationPtr)
-
 foreign import ccall "tokio_time_sleep"
-  tokio_time_sleep :: DurationPtr -> IO (FuturePtr ())
+  sleep :: Duration -> IO (FuturePtr ())
 
-makeDelay :: Word64 -> IO (FuturePtr ())
-makeDelay = tokio_time_sleep <=< duration_from_secs . CULong
+delay :: IO Duration -> Future ()
+delay duration = Future $ sleep =<< duration
 
-delay :: Word64 -> Future ()
-delay n = Future (makeDelay n)
+delaySecs :: Word64 -> Future ()
+delaySecs = delay . fromSecs
+
+delayMillis :: Word64 -> Future ()
+delayMillis = delay . fromMillis
+
+delayMicros :: Word64 -> Future ()
+delayMicros = delay . fromMicros
+
+delayNanos :: Word64 -> Future ()
+delayNanos = delay . fromNanos

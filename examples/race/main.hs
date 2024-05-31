@@ -7,14 +7,14 @@ callA :: Int -> Future String
 callA 0 = pure "Text"
 callA n = do
   liftIO $ putStrLn $ "A " ++ show n
-  delay 1
+  delaySecs 1
   callA $ n - 1
 
 callB :: Int -> Future Int
 callB 0 = pure 5
 callB n = do
   liftIO $ putStrLn $ "B " ++ show n
-  delay 2
+  delaySecs 2
   callB $ n - 1
 
 toText :: Show b => Either String b -> String

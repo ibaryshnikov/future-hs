@@ -13,9 +13,9 @@ unsafe impl Send for StablePtr {}
 type PinnedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 type RawFuture<T> = *mut PinnedFuture<T>;
 
-type MainCallback = unsafe extern "C" fn() -> RawFuture<()>;
-type IOCallback = unsafe extern "C" fn() -> *const u8;
-type ComposeCallback = unsafe extern "C" fn(ptr: *const u8) -> RawFuture<StablePtr>;
+type MainCallback = extern "C" fn() -> RawFuture<()>;
+type IOCallback = extern "C" fn() -> *const u8;
+type ComposeCallback = extern "C" fn(ptr: *const u8) -> RawFuture<StablePtr>;
 
 extern "C" {
     fn free_haskell_fun_ptr(ptr: usize);
@@ -36,7 +36,7 @@ macro_rules! free_fun_ptr {
 extern "C" fn future_run(callback: MainCallback) {
     let runtime = Runtime::new().expect("Should build a runtime");
     runtime.block_on(async move {
-        let future_ptr = unsafe { callback() };
+        let future_ptr = callback();
         free_fun_ptr!(callback);
         let future = unsafe { Box::from_raw(future_ptr) };
         future.await;
@@ -53,7 +53,7 @@ extern "C" fn future_wrap_value(ptr: *const u8) -> RawFuture<StablePtr> {
 
 #[no_mangle]
 extern "C" fn future_wrap_io(callback: IOCallback) -> RawFuture<StablePtr> {
-    let ptr = unsafe { callback() };
+    let ptr = callback();
     free_fun_ptr!(callback);
     let value = StablePtr { ptr };
     let future = async move { value };
@@ -64,13 +64,11 @@ extern "C" fn future_wrap_io(callback: IOCallback) -> RawFuture<StablePtr> {
 #[no_mangle]
 extern "C" fn future_spawn_blocking(callback: IOCallback) -> RawFuture<StablePtr> {
     let handle = tokio::task::spawn_blocking(move || {
-        let ptr = unsafe { callback() };
+        let ptr = callback();
         free_fun_ptr!(callback);
         StablePtr { ptr }
     });
-    let future = async move {
-        handle.await.expect("Should join spawn_blocking handle")
-    };
+    let future = async move { handle.await.expect("Should join spawn_blocking handle") };
     let pinned = Box::pin(future);
     Box::into_raw(Box::new(pinned))
 }
@@ -83,7 +81,7 @@ extern "C" fn future_compose(
     let future_a = unsafe { Box::from_raw(future_ptr_a) };
     let future = async move {
         let a = future_a.await;
-        let future_ptr_b = unsafe { fab(a.ptr) };
+        let future_ptr_b = fab(a.ptr);
         free_fun_ptr!(fab);
         let future_b = unsafe { Box::from_raw(future_ptr_b) };
         future_b.await
