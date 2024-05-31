@@ -14,7 +14,7 @@ type PinnedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 type RawFuture<T> = *mut PinnedFuture<T>;
 
 type MainCallback = extern "C" fn() -> RawFuture<()>;
-type IOCallback = extern "C" fn() -> *const u8;
+type BlockingCallback = extern "C" fn() -> *const u8;
 type ComposeCallback = extern "C" fn(ptr: *const u8) -> RawFuture<StablePtr>;
 
 extern "C" {
@@ -52,17 +52,7 @@ extern "C" fn future_wrap_value(ptr: *const u8) -> RawFuture<StablePtr> {
 }
 
 #[no_mangle]
-extern "C" fn future_wrap_io(callback: IOCallback) -> RawFuture<StablePtr> {
-    let ptr = callback();
-    free_fun_ptr!(callback);
-    let value = StablePtr { ptr };
-    let future = async move { value };
-    let pinned = Box::pin(future);
-    Box::into_raw(Box::new(pinned))
-}
-
-#[no_mangle]
-extern "C" fn future_spawn_blocking(callback: IOCallback) -> RawFuture<StablePtr> {
+extern "C" fn future_spawn_blocking(callback: BlockingCallback) -> RawFuture<StablePtr> {
     let handle = tokio::task::spawn_blocking(move || {
         let ptr = callback();
         free_fun_ptr!(callback);

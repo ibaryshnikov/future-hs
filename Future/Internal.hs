@@ -32,8 +32,10 @@ foreign import ccall "future_wrap_value"
   wrap_value :: StablePtr a -> IO (FuturePtr a)
 
 wrap :: a -> Future a
-wrap a = Future $ do
-  wrap_value =<< newStablePtr a
+wrap a = Future $ wrap_value =<< newStablePtr a
+
+wrapIO :: IO a -> Future a
+wrapIO io = Future $ wrap_value =<< newStablePtr =<< io
 
 -- wrap ENDS
 
@@ -88,23 +90,13 @@ fromPtr ptr = do
 
 -- compose ENDS
 
--- wrapIO STARTS
-
-foreign import ccall "future_wrap_io"
-  wrap_io :: FunPtr (IO (StablePtr a)) -> IO (FuturePtr a)
-
-foreign import ccall "wrapper"
-  makeIOCallback :: IO (StablePtr a) -> IO (FunPtr (IO (StablePtr a)))
-
-wrapIO :: IO a -> Future a
-wrapIO io = Future $ wrap_value =<< newStablePtr =<< io
-
--- wrapIO ENDS
-
 -- spawnBlocking STARTS
 
 foreign import ccall "future_spawn_blocking"
   spawn_blocking :: FunPtr (IO (StablePtr a)) -> IO (FuturePtr a)
+
+foreign import ccall "wrapper"
+  makeBlockingCallback :: IO (StablePtr a) -> IO (FunPtr (IO (StablePtr a)))
 
 wrapBlockingCallback :: IO a -> IO (StablePtr a)
 wrapBlockingCallback io = newStablePtr =<< io
@@ -112,7 +104,7 @@ wrapBlockingCallback io = newStablePtr =<< io
 spawnBlocking :: IO a -> Future a
 spawnBlocking io = Future $ do
   let callback = wrapBlockingCallback io
-  spawn_blocking =<< makeIOCallback callback
+  spawn_blocking =<< makeBlockingCallback callback
 
 -- spawnBlocking ENDS
 

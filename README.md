@@ -34,12 +34,12 @@ import Future.Time
 
 callA :: Future Int
 callA = do
-  delay 2
+  delaySecs 2
   pure 1
 
 callB :: Int -> Future Int
 callB a = do
-  delay 2
+  delaySecs 2
   pure $ a + 4
 
 example :: Future ()
